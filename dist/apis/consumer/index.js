@@ -9,6 +9,7 @@ export * as listOffsetsV8 from "./list-offsets-v8.js";
 export * as listOffsetsV9 from "./list-offsets-v9.js";
 export * as offsetCommitV8 from "./offset-commit-v8.js";
 export * as offsetCommitV9 from "./offset-commit-v9.js";
+export * as offsetFetchV7 from "./offset-fetch-v7.js";
 export * as offsetFetchV8 from "./offset-fetch-v8.js";
 export * as offsetFetchV9 from "./offset-fetch-v9.js";
 export * as syncGroupV5 from "./sync-group-v5.js";
