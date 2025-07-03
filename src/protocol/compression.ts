@@ -29,6 +29,7 @@ let snappyCompressSync: CompressionOperation | undefined
 let snappyDecompressSync: CompressionOperation | undefined
 let lz4CompressSync: CompressionOperation | undefined
 let lz4DecompressSync: CompressionOperation | undefined
+let lz4DecompressFrameSync: CompressionOperation | undefined
 
 function loadSnappy () {
   try {
@@ -45,11 +46,13 @@ function loadSnappy () {
 
 function loadLZ4 () {
   try {
-    const lz4 = require('lz4-napi')
+    const lz4 = require('@anglinb/lz4-napi')
     lz4CompressSync = lz4.compressSync
     lz4DecompressSync = lz4.uncompressSync
+    lz4DecompressFrameSync = lz4.decompressFrameSync
     /* c8 ignore next 5 - In tests lz4-napi is always available */
   } catch (e) {
+    console.error('!!! error', e)
     throw new UnsupportedCompressionError(
       'Cannot load lz4-napi module, which is an optionalDependency. Please check your local installation.'
     )
@@ -113,7 +116,7 @@ export const compressionsAlgorithms = {
         loadLZ4()
       }
 
-      return lz4DecompressSync!(ensureBuffer(data))
+      return lz4DecompressFrameSync!(ensureBuffer(data))
     },
     bitmask: 3,
     available: true
