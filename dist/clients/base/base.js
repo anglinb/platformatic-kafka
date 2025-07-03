@@ -47,6 +47,7 @@ export class Base extends EventEmitter {
     [kPrometheus];
     #metadata;
     #inflightDeduplications;
+    #pendingRetryTimeouts;
     constructor(options) {
         super();
         this[kClientType] = 'base';
@@ -68,6 +69,7 @@ export class Base extends EventEmitter {
         this[kConnections] = this[kCreateConnectionPool]();
         this[kClosed] = false;
         this.#inflightDeduplications = new Map();
+        this.#pendingRetryTimeouts = new Set();
         // Initialize metrics
         if (options.metrics) {
             this[kPrometheus] = options.metrics;
@@ -97,6 +99,11 @@ export class Base extends EventEmitter {
             callback = createPromisifiedCallback();
         }
         this[kClosed] = true;
+        // Cancel all pending retry timeouts
+        for (const timeout of this.#pendingRetryTimeouts) {
+            clearTimeout(timeout);
+        }
+        this.#pendingRetryTimeouts.clear();
         this[kConnections].close(callback);
         return callback[kCallbackPromise];
     }
@@ -234,6 +241,11 @@ export class Base extends EventEmitter {
         return broker;
     }
     [kPerformWithRetry](operationId, operation, callback, attempt = 0, errors = [], shouldSkipRetry) {
+        // Check if client is closed before attempting operation
+        if (this[kClosed]) {
+            callback(new NetworkError('Client is closed.', { closed: true, instance: this[kInstance] }), undefined);
+            return callback[kCallbackPromise];
+        }
         const retries = this[kOptions].retries;
         this.emitWithDebug('client', 'performWithRetry', operationId, attempt, retries);
         operation((error, result) => {
@@ -241,10 +253,17 @@ export class Base extends EventEmitter {
                 const genericError = error;
                 const retriable = genericError.findBy?.('code', NetworkError.code) || genericError.findBy?.('canRetry', true);
                 errors.push(error);
-                if (attempt < retries && retriable && !shouldSkipRetry?.(error)) {
-                    setTimeout(() => {
+                if (attempt < retries && retriable && !shouldSkipRetry?.(error) && !this[kClosed]) {
+                    const timeout = setTimeout(() => {
+                        this.#pendingRetryTimeouts.delete(timeout);
+                        // Check again if client is closed before retrying
+                        if (this[kClosed]) {
+                            callback(new NetworkError('Client is closed.', { closed: true, instance: this[kInstance] }), undefined);
+                            return;
+                        }
                         this[kPerformWithRetry](operationId, operation, callback, attempt + 1, errors, shouldSkipRetry);
                     }, this[kOptions].retryDelay);
+                    this.#pendingRetryTimeouts.add(timeout);
                 }
                 else {
                     if (attempt === 0) {

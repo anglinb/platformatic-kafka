@@ -11,6 +11,7 @@ export class ConnectionPool extends EventEmitter {
     #ownerId;
     #connections;
     #connectionOptions;
+    #closed;
     constructor(clientId, connectionOptions = {}) {
         super();
         this.#instanceId = currentInstance++;
@@ -18,6 +19,7 @@ export class ConnectionPool extends EventEmitter {
         this.#ownerId = connectionOptions.ownerId;
         this.#connections = new Map();
         this.#connectionOptions = connectionOptions;
+        this.#closed = false;
         notifyCreation('connection-pool', this);
     }
     get instanceId() {
@@ -41,6 +43,7 @@ export class ConnectionPool extends EventEmitter {
         if (!callback) {
             callback = createPromisifiedCallback();
         }
+        this.#closed = true;
         if (this.#connections.size === 0) {
             callback(null);
             return callback[kCallbackPromise];
@@ -52,6 +55,10 @@ export class ConnectionPool extends EventEmitter {
         return callback[kCallbackPromise];
     }
     #get(broker, callback) {
+        if (this.#closed) {
+            callback(new Error('Connection pool is closed'), undefined);
+            return;
+        }
         const key = `${broker.host}:${broker.port}`;
         const existing = this.#connections.get(key);
         if (existing) {
@@ -102,6 +109,10 @@ export class ConnectionPool extends EventEmitter {
         });
     }
     #getFirstAvailable(brokers, current = 0, errors = [], callback) {
+        if (this.#closed) {
+            callback(new Error('Connection pool is closed'), undefined);
+            return;
+        }
         this.get(brokers[current], (error, connection) => {
             if (error) {
                 errors.push(error);

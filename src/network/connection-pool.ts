@@ -19,6 +19,7 @@ export class ConnectionPool extends EventEmitter {
   #ownerId: number | undefined
   #connections: Map<string, Connection>
   #connectionOptions: ConnectionOptions
+  #closed: boolean
 
   constructor (clientId: string, connectionOptions: ConnectionOptions = {}) {
     super()
@@ -27,6 +28,7 @@ export class ConnectionPool extends EventEmitter {
     this.#ownerId = connectionOptions.ownerId
     this.#connections = new Map()
     this.#connectionOptions = connectionOptions
+    this.#closed = false
 
     notifyCreation('connection-pool', this)
   }
@@ -82,6 +84,8 @@ export class ConnectionPool extends EventEmitter {
       callback = createPromisifiedCallback()
     }
 
+    this.#closed = true
+
     if (this.#connections.size === 0) {
       callback(null)
       return callback[kCallbackPromise]
@@ -101,6 +105,11 @@ export class ConnectionPool extends EventEmitter {
   }
 
   #get (broker: Broker, callback: Callback<Connection>): void {
+    if (this.#closed) {
+      callback(new Error('Connection pool is closed'), undefined as unknown as Connection)
+      return
+    }
+
     const key = `${broker.host}:${broker.port}`
     const existing = this.#connections.get(key)
 
@@ -170,6 +179,11 @@ export class ConnectionPool extends EventEmitter {
     errors: Error[] = [],
     callback: CallbackWithPromise<Connection>
   ): void {
+    if (this.#closed) {
+      callback(new Error('Connection pool is closed'), undefined as unknown as Connection)
+      return
+    }
+
     this.get(brokers[current], (error, connection) => {
       if (error) {
         errors.push(error)
