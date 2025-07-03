@@ -20,6 +20,7 @@ export declare const kConnections: unique symbol;
 export declare const kFetchConnections: unique symbol;
 export declare const kCreateConnectionPool: unique symbol;
 export declare const kClosed: unique symbol;
+export declare const kClosing: unique symbol;
 export declare const kListApis: unique symbol;
 export declare const kMetadata: unique symbol;
 export declare const kCheckNotClosed: unique symbol;
@@ -43,6 +44,7 @@ export declare class Base<OptionsType extends BaseOptions = BaseOptions> extends
     [kOptions]: OptionsType;
     [kConnections]: ConnectionPool;
     [kClosed]: boolean;
+    [kClosing]: boolean;
     [kPrometheus]: Metrics | undefined;
     constructor(options: OptionsType);
     get instanceId(): number;

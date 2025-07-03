@@ -54,6 +54,7 @@ import {
   kAfterCreate,
   kCheckNotClosed,
   kClosed,
+  kClosing,
   kCreateConnectionPool,
   kFetchConnections,
   kFormatValidationErrors,
@@ -201,7 +202,8 @@ export class Consumer<Key = Buffer, Value = Buffer, HeaderKey = Buffer, HeaderVa
       return callback[kCallbackPromise]
     }
 
-    this[kClosed] = true
+    // Mark as closing to prevent new operations from starting
+    this[kClosing] = true
 
     const closer = this.#membershipActive
       ? this.#leaveGroup.bind(this)
@@ -211,14 +213,18 @@ export class Consumer<Key = Buffer, Value = Buffer, HeaderKey = Buffer, HeaderVa
 
     closer(force as boolean, error => {
       if (error) {
-        this[kClosed] = false
+        this[kClosing] = false
         callback(error)
         return
       }
 
+      // Only mark as closed after leaving the group
+      this[kClosed] = true
+
       this[kFetchConnections].close(error => {
         if (error) {
           this[kClosed] = false
+          this[kClosing] = false
           callback(error)
           return
         }
@@ -226,6 +232,7 @@ export class Consumer<Key = Buffer, Value = Buffer, HeaderKey = Buffer, HeaderVa
         super.close(error => {
           if (error) {
             this[kClosed] = false
+            this[kClosing] = false
             callback(error)
             return
           }

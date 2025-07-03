@@ -44,6 +44,7 @@ export const kConnections = Symbol('plt.kafka.base.connections')
 export const kFetchConnections = Symbol('plt.kafka.base.fetchCnnections')
 export const kCreateConnectionPool = Symbol('plt.kafka.base.createConnectionPool')
 export const kClosed = Symbol('plt.kafka.base.closed')
+export const kClosing = Symbol('plt.kafka.base.closing')
 export const kListApis = Symbol('plt.kafka.base.listApis')
 export const kMetadata = Symbol('plt.kafka.base.metadata')
 export const kCheckNotClosed = Symbol('plt.kafka.base.checkNotClosed')
@@ -72,6 +73,7 @@ export class Base<OptionsType extends BaseOptions = BaseOptions> extends EventEm
   [kOptions]: OptionsType;
   [kConnections]: ConnectionPool;
   [kClosed]: boolean;
+  [kClosing]: boolean;
   [kPrometheus]: Metrics | undefined
 
   #metadata: ClusterMetadata | undefined
@@ -103,6 +105,7 @@ export class Base<OptionsType extends BaseOptions = BaseOptions> extends EventEm
     // Initialize main connection pool
     this[kConnections] = this[kCreateConnectionPool]()
     this[kClosed] = false
+    this[kClosing] = false
 
     this.#inflightDeduplications = new Map()
     this.#pendingRetryTimeouts = new Set()
@@ -145,13 +148,16 @@ export class Base<OptionsType extends BaseOptions = BaseOptions> extends EventEm
       callback = createPromisifiedCallback<void>()
     }
 
-    this[kClosed] = true
+    this[kClosing] = true
 
     // Cancel all pending retry timeouts
     for (const timeout of this.#pendingRetryTimeouts) {
       clearTimeout(timeout)
     }
     this.#pendingRetryTimeouts.clear()
+
+    // Mark as closed after cancelling timeouts
+    this[kClosed] = true
 
     this[kConnections].close(callback)
 
@@ -339,6 +345,12 @@ export class Base<OptionsType extends BaseOptions = BaseOptions> extends EventEm
       return true
     }
 
+    if (this[kClosing]) {
+      const error = new NetworkError('Client is closing.', { closing: true, instance: this[kInstance] })
+      callback(error, undefined)
+      return true
+    }
+
     return false
   }
 
@@ -367,12 +379,6 @@ export class Base<OptionsType extends BaseOptions = BaseOptions> extends EventEm
     errors: Error[] = [],
     shouldSkipRetry?: (e: Error) => boolean
   ): void | Promise<ReturnType> {
-    // Check if client is closed before attempting operation
-    if (this[kClosed]) {
-      callback(new NetworkError('Client is closed.', { closed: true, instance: this[kInstance] }), undefined as ReturnType)
-      return callback[kCallbackPromise]
-    }
-
     const retries = this[kOptions].retries! as number
     this.emitWithDebug('client', 'performWithRetry', operationId, attempt, retries)
 
@@ -382,12 +388,12 @@ export class Base<OptionsType extends BaseOptions = BaseOptions> extends EventEm
         const retriable = genericError.findBy?.('code', NetworkError.code) || genericError.findBy?.('canRetry', true)
         errors.push(error)
 
-        if (attempt < retries && retriable && !shouldSkipRetry?.(error) && !this[kClosed]) {
+        if (attempt < retries && retriable && !shouldSkipRetry?.(error) && !this[kClosing]) {
           const timeout = setTimeout(() => {
             this.#pendingRetryTimeouts.delete(timeout)
-            // Check again if client is closed before retrying
-            if (this[kClosed]) {
-              callback(new NetworkError('Client is closed.', { closed: true, instance: this[kInstance] }), undefined as ReturnType)
+            // Check again if client is closing before retrying
+            if (this[kClosing]) {
+              callback(new NetworkError('Client is closing.', { closing: true, instance: this[kInstance] }), undefined as ReturnType)
               return
             }
             this[kPerformWithRetry](operationId, operation, callback, attempt + 1, errors, shouldSkipRetry)

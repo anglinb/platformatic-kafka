@@ -19,6 +19,7 @@ export const kConnections = Symbol('plt.kafka.base.connections');
 export const kFetchConnections = Symbol('plt.kafka.base.fetchCnnections');
 export const kCreateConnectionPool = Symbol('plt.kafka.base.createConnectionPool');
 export const kClosed = Symbol('plt.kafka.base.closed');
+export const kClosing = Symbol('plt.kafka.base.closing');
 export const kListApis = Symbol('plt.kafka.base.listApis');
 export const kMetadata = Symbol('plt.kafka.base.metadata');
 export const kCheckNotClosed = Symbol('plt.kafka.base.checkNotClosed');
@@ -44,6 +45,7 @@ export class Base extends EventEmitter {
     [kOptions];
     [kConnections];
     [kClosed];
+    [kClosing];
     [kPrometheus];
     #metadata;
     #inflightDeduplications;
@@ -68,6 +70,7 @@ export class Base extends EventEmitter {
         // Initialize main connection pool
         this[kConnections] = this[kCreateConnectionPool]();
         this[kClosed] = false;
+        this[kClosing] = false;
         this.#inflightDeduplications = new Map();
         this.#pendingRetryTimeouts = new Set();
         // Initialize metrics
@@ -98,12 +101,14 @@ export class Base extends EventEmitter {
         if (!callback) {
             callback = createPromisifiedCallback();
         }
-        this[kClosed] = true;
+        this[kClosing] = true;
         // Cancel all pending retry timeouts
         for (const timeout of this.#pendingRetryTimeouts) {
             clearTimeout(timeout);
         }
         this.#pendingRetryTimeouts.clear();
+        // Mark as closed after cancelling timeouts
+        this[kClosed] = true;
         this[kConnections].close(callback);
         return callback[kCallbackPromise];
     }
@@ -223,6 +228,11 @@ export class Base extends EventEmitter {
             callback(error, undefined);
             return true;
         }
+        if (this[kClosing]) {
+            const error = new NetworkError('Client is closing.', { closing: true, instance: this[kInstance] });
+            callback(error, undefined);
+            return true;
+        }
         return false;
     }
     [kClearMetadata]() {
@@ -241,11 +251,6 @@ export class Base extends EventEmitter {
         return broker;
     }
     [kPerformWithRetry](operationId, operation, callback, attempt = 0, errors = [], shouldSkipRetry) {
-        // Check if client is closed before attempting operation
-        if (this[kClosed]) {
-            callback(new NetworkError('Client is closed.', { closed: true, instance: this[kInstance] }), undefined);
-            return callback[kCallbackPromise];
-        }
         const retries = this[kOptions].retries;
         this.emitWithDebug('client', 'performWithRetry', operationId, attempt, retries);
         operation((error, result) => {
@@ -253,12 +258,12 @@ export class Base extends EventEmitter {
                 const genericError = error;
                 const retriable = genericError.findBy?.('code', NetworkError.code) || genericError.findBy?.('canRetry', true);
                 errors.push(error);
-                if (attempt < retries && retriable && !shouldSkipRetry?.(error) && !this[kClosed]) {
+                if (attempt < retries && retriable && !shouldSkipRetry?.(error) && !this[kClosing]) {
                     const timeout = setTimeout(() => {
                         this.#pendingRetryTimeouts.delete(timeout);
-                        // Check again if client is closed before retrying
-                        if (this[kClosed]) {
-                            callback(new NetworkError('Client is closed.', { closed: true, instance: this[kInstance] }), undefined);
+                        // Check again if client is closing before retrying
+                        if (this[kClosing]) {
+                            callback(new NetworkError('Client is closing.', { closing: true, instance: this[kInstance] }), undefined);
                             return;
                         }
                         this[kPerformWithRetry](operationId, operation, callback, attempt + 1, errors, shouldSkipRetry);

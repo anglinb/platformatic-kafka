@@ -4,7 +4,7 @@ import { consumerCommitsChannel, consumerConsumesChannel, consumerFetchesChannel
 import { UserError } from "../../errors.js";
 import { Reader } from "../../protocol/reader.js";
 import { Writer } from "../../protocol/writer.js";
-import { Base, kAfterCreate, kCheckNotClosed, kClosed, kCreateConnectionPool, kFetchConnections, kFormatValidationErrors, kGetApi, kGetBootstrapConnection, kGetConnection, kMetadata, kOptions, kPerformDeduplicated, kPerformWithRetry, kPrometheus, kValidateOptions } from "../base/base.js";
+import { Base, kAfterCreate, kCheckNotClosed, kClosed, kClosing, kCreateConnectionPool, kFetchConnections, kFormatValidationErrors, kGetApi, kGetBootstrapConnection, kGetConnection, kMetadata, kOptions, kPerformDeduplicated, kPerformWithRetry, kPrometheus, kValidateOptions } from "../base/base.js";
 import { defaultBaseOptions } from "../base/options.js";
 import { ensureMetric } from "../metrics.js";
 import { MessagesStream } from "./messages-stream.js";
@@ -84,7 +84,8 @@ export class Consumer extends Base {
             callback(null);
             return callback[kCallbackPromise];
         }
-        this[kClosed] = true;
+        // Mark as closing to prevent new operations from starting
+        this[kClosing] = true;
         const closer = this.#membershipActive
             ? this.#leaveGroup.bind(this)
             : function noopCloser(_, callback) {
@@ -92,19 +93,23 @@ export class Consumer extends Base {
             };
         closer(force, error => {
             if (error) {
-                this[kClosed] = false;
+                this[kClosing] = false;
                 callback(error);
                 return;
             }
+            // Only mark as closed after leaving the group
+            this[kClosed] = true;
             this[kFetchConnections].close(error => {
                 if (error) {
                     this[kClosed] = false;
+                    this[kClosing] = false;
                     callback(error);
                     return;
                 }
                 super.close(error => {
                     if (error) {
                         this[kClosed] = false;
+                        this[kClosing] = false;
                         callback(error);
                         return;
                     }
