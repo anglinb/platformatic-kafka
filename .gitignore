@@ -1,4 +1,4 @@
-dist/
+# dist/
 external/
 node_modules
 coverage

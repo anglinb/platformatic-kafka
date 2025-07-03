@@ -1,0 +1,38 @@
+import { type CallbackWithPromise } from '../../apis/callbacks.ts';
+import { type FetchResponse } from '../../apis/consumer/fetch-v17.ts';
+import { type ConnectionPool } from '../../network/connection-pool.ts';
+import { Base, kFetchConnections } from '../base/base.ts';
+import { MessagesStream } from './messages-stream.ts';
+import { TopicsMap } from './topics-map.ts';
+import { type CommitOptions, type ConsumeOptions, type ConsumerOptions, type FetchOptions, type GroupAssignment, type GroupOptions, type ListCommitsOptions, type ListOffsetsOptions, type Offsets, type OffsetsWithTimestamps } from './types.ts';
+export declare class Consumer<Key = Buffer, Value = Buffer, HeaderKey = Buffer, HeaderValue = Buffer> extends Base<ConsumerOptions<Key, Value, HeaderKey, HeaderValue>> {
+    #private;
+    groupId: string;
+    generationId: number;
+    memberId: string | null;
+    topics: TopicsMap;
+    assignments: GroupAssignment[] | null;
+    [kFetchConnections]: ConnectionPool;
+    constructor(options: ConsumerOptions<Key, Value, HeaderKey, HeaderValue>);
+    get streamsCount(): number;
+    close(force: boolean | CallbackWithPromise<void>, callback?: CallbackWithPromise<void>): void;
+    close(force?: boolean): Promise<void>;
+    consume(options: ConsumeOptions<Key, Value, HeaderKey, HeaderValue>, callback: CallbackWithPromise<MessagesStream<Key, Value, HeaderKey, HeaderValue>>): void;
+    consume(options: ConsumeOptions<Key, Value, HeaderKey, HeaderValue>): Promise<MessagesStream<Key, Value, HeaderKey, HeaderValue>>;
+    fetch(options: FetchOptions<Key, Value, HeaderKey, HeaderValue>, callback: CallbackWithPromise<FetchResponse>): void;
+    fetch(options: FetchOptions<Key, Value, HeaderKey, HeaderValue>): Promise<FetchResponse>;
+    commit(options: CommitOptions, callback: CallbackWithPromise<void>): void;
+    commit(options: CommitOptions): Promise<void>;
+    listOffsets(options: ListOffsetsOptions, callback: CallbackWithPromise<Offsets>): void;
+    listOffsets(options: ListOffsetsOptions): Promise<Offsets>;
+    listOffsetsWithTimestamps(options: ListOffsetsOptions, callback: CallbackWithPromise<OffsetsWithTimestamps>): void;
+    listOffsetsWithTimestamps(options: ListOffsetsOptions): Promise<OffsetsWithTimestamps>;
+    listCommittedOffsets(options: ListCommitsOptions, callback: CallbackWithPromise<Offsets>): void;
+    listCommittedOffsets(options: ListCommitsOptions): Promise<Offsets>;
+    findGroupCoordinator(callback: CallbackWithPromise<number>): void;
+    findGroupCoordinator(): Promise<number>;
+    joinGroup(options: GroupOptions, callback: CallbackWithPromise<string>): void;
+    joinGroup(options: GroupOptions): Promise<string>;
+    leaveGroup(force?: boolean | CallbackWithPromise<void>, callback?: CallbackWithPromise<void>): void;
+    leaveGroup(force?: boolean): Promise<void>;
+}
