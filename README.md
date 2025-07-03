@@ -1,6 +1,6 @@
-# @platformatic/kafka
+# @anglinb/platformatic-kafka
 
-A modern, high-performance, pure TypeScript/JavaScript type safe client for Apache Kafka.
+A modern, high-performance, pure TypeScript/JavaScript type safe client for Apache Kafka. (Fork of @platformatic/kafka)
 
 ## Features
 
@@ -20,7 +20,7 @@ Supported Kafka version are from **3.5.0** to **4.0.0** and equivalent, edges in
 ## Installation
 
 ```bash
-npm install @platformatic/kafka
+npm install @anglinb/platformatic-kafka
 ```
 
 ## Getting Started
@@ -28,7 +28,7 @@ npm install @platformatic/kafka
 ### Producer
 
 ```typescript
-import { Producer, stringSerializers } from '@platformatic/kafka'
+import { Producer, stringSerializers } from '@anglinb/platformatic-kafka'
 
 // Create a producer with string serialisers
 const producer = new Producer({
@@ -56,7 +56,7 @@ await producer.close()
 ### Consumer
 
 ```typescript
-import { Consumer, stringDeserializers } from '@platformatic/kafka'
+import { Consumer, stringDeserializers } from '@anglinb/platformatic-kafka'
 import { forEach } from 'hwp'
 
 // Create a consumer with string deserialisers
@@ -103,7 +103,7 @@ await consumer.close()
 ### Admin
 
 ```typescript
-import { Admin } from '@platformatic/kafka'
+import { Admin } from '@anglinb/platformatic-kafka'
 
 // Create an admin client
 const admin = new Admin({
@@ -170,7 +170,7 @@ import {
   Producer,
   stringDeserializer,
   stringSerializer
-} from '@platformatic/kafka'
+} from '@anglinb/platformatic-kafka'
 
 type Strings = string[]
 
